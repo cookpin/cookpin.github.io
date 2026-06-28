@@ -43,7 +43,8 @@
       }
 
       button,
-      input {
+      input,
+      select {
         font: inherit;
       }
 
@@ -222,6 +223,36 @@
         color: #bbb;
         font-size: 14px;
         font-weight: 400;
+        margin-left: auto;
+      }
+
+      .threshold-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: var(--radius);
+        background: #202020;
+        color: #bbb;
+        font-size: 14px;
+        font-weight: 400;
+      }
+
+      .threshold-row select {
+        min-height: 30px;
+        border: 1px solid #343434;
+        border-radius: 6px;
+        background: #181818;
+        color: #ddd;
+        padding: 0 24px 0 8px;
+      }
+
+      .filter-checks {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         margin-left: auto;
       }
 
@@ -429,6 +460,11 @@
           margin-left: 0;
         }
 
+        .filter-checks {
+          justify-content: flex-start;
+          margin-left: 0;
+        }
+
         .row {
           grid-template-columns: 22px 1fr;
           gap: 4px;
@@ -483,10 +519,31 @@
 
         <div class="tab-row">
           <div class="tabs" id="tabs"></div>
-          <label class="check-row">
-            <input id="oldOnly" type="checkbox" />
-            30일 넘게 팔로우한 계정만
-          </label>
+          <div class="filter-checks">
+            <label class="threshold-row">
+              좋아요
+              <select id="quietLikeMax">
+                <option value="1">1개 이하</option>
+                <option value="2">2개 이하</option>
+                <option value="3">3개 이하</option>
+                <option value="4">4개 이하</option>
+                <option value="5">5개 이하</option>
+                <option value="6">6개 이하</option>
+                <option value="7">7개 이하</option>
+                <option value="8">8개 이하</option>
+                <option value="9">9개 이하</option>
+                <option value="10">10개 이하</option>
+              </select>
+            </label>
+            <label class="check-row">
+              <input id="oldOnly" type="checkbox" />
+              30일 넘게 팔로우한 계정만
+            </label>
+            <label class="check-row">
+              <input id="hideDone" type="checkbox" />
+              체크한 계정 숨기기
+            </label>
+          </div>
         </div>
 
         <div class="result-card">
@@ -515,7 +572,7 @@
         info: "personal_information.json",
       };
 
-      const STORAGE_KEY = "threads-tool-state-v1";
+      const STORAGE_KEY = "threads-tool-state-v2";
 
       const state = {
         activeTab: "unfollowers",
@@ -533,7 +590,9 @@
         emptyResult: document.getElementById("emptyResult"),
         stats: document.getElementById("stats"),
         tabs: document.getElementById("tabs"),
+        quietLikeMax: document.getElementById("quietLikeMax"),
         oldOnly: document.getElementById("oldOnly"),
+        hideDone: document.getElementById("hideDone"),
         resultTitle: document.getElementById("resultTitle"),
         resultCount: document.getElementById("resultCount"),
         list: document.getElementById("list"),
@@ -565,7 +624,17 @@
 
       els.oldOnly.addEventListener("change", () => {
         saveStoredState();
-        renderRows();
+        renderAnalysis();
+      });
+
+      els.quietLikeMax.addEventListener("change", () => {
+        saveStoredState();
+        renderAnalysis();
+      });
+
+      els.hideDone.addEventListener("change", () => {
+        saveStoredState();
+        renderAnalysis();
       });
 
       els.list.addEventListener("change", (event) => {
@@ -579,6 +648,7 @@
           state.doneUsernames.delete(username);
         }
         saveStoredState();
+        if (els.hideDone.checked) renderAnalysis();
       });
 
       restoreStoredState();
@@ -594,6 +664,7 @@
           state.analysis = analyzeThreads(json, zip, file);
           state.analysis.fileName = file.name;
           state.activeTab = "unfollowers";
+          state.doneUsernames = new Set();
           saveStoredState();
           renderAnalysis();
         } catch (error) {
@@ -661,8 +732,9 @@
           },
           quiet: {
             label: "소통 없는 계정",
-            title: "내가 팔로우 중인데 좋아요 기록이 없는 계정",
-            rows: enrichedFollowing.filter((item) => item.visibleInteractions === 0),
+            title: "내가 팔로우 중인데 좋아요 기록이 적은 계정",
+            kind: "quiet",
+            rows: enrichedFollowing,
           },
         };
 
@@ -678,7 +750,6 @@
             following: following.length,
             mutual: enrichedFollowing.filter((item) => item.followsBack).length,
             unfollowers: tabs.unfollowers.rows.length,
-            quiet: tabs.quiet.rows.length,
             fans: tabs.fans.rows.length,
           },
         };
@@ -779,7 +850,7 @@
           { label: "팔로워", value: analysis.totals.followers },
           { label: "팔로잉", value: analysis.totals.following },
           { label: "맞팔", value: analysis.totals.mutual },
-          { label: "소통 없는 계정", value: analysis.totals.quiet },
+          { label: "소통 없는 계정", value: getThresholdRows(analysis.tabs.quiet).length },
           { label: "나만 팔로우 중인 계정", value: analysis.totals.unfollowers },
           { label: "상대방만 팔로우 중인 계정", value: analysis.totals.fans },
         ];
@@ -787,7 +858,10 @@
         els.stats.innerHTML = stats.map((item) => renderStatCard(item.label, item.value)).join("");
 
         els.tabs.innerHTML = Object.entries(analysis.tabs)
-          .map(([key, tab]) => `<button class="tab ${key === state.activeTab ? "active" : ""}" type="button" data-tab="${key}">${escapeHtml(tab.label)} ${tab.rows.length.toLocaleString("ko-KR")}</button>`)
+          .map(([key, tab]) => {
+            const count = getVisibleRows(tab).length;
+            return `<button class="tab ${key === state.activeTab ? "active" : ""}" type="button" data-tab="${key}">${escapeHtml(tab.label)} ${count.toLocaleString("ko-KR")}</button>`;
+          })
           .join("");
 
         els.tabs.querySelectorAll(".tab").forEach((button) => {
@@ -806,11 +880,7 @@
         if (!analysis) return;
 
         const tab = analysis.tabs[state.activeTab];
-        const oldOnly = els.oldOnly.checked;
-
-        let rows = tab.rows.slice();
-
-        if (oldOnly) rows = rows.filter((item) => item.daysFollowed === null || item.daysFollowed >= 30);
+        const rows = getVisibleRows(tab);
 
         els.resultTitle.textContent = tab.title;
         els.resultCount.textContent = `${rows.length.toLocaleString("ko-KR")}명`;
@@ -821,6 +891,30 @@
         }
 
         els.list.innerHTML = rows.map(renderAccountRow).join("");
+      }
+
+      function getVisibleRows(tab) {
+        let rows = getThresholdRows(tab);
+        if (els.oldOnly.checked) {
+          rows = rows.filter((item) => item.daysFollowed === null || item.daysFollowed >= 30);
+        }
+        if (els.hideDone.checked) {
+          rows = rows.filter((item) => !state.doneUsernames.has(item.username));
+        }
+        return rows.sort((a, b) => {
+          const likedDiff = (a.liked || 0) - (b.liked || 0);
+          if (likedDiff !== 0) return likedDiff;
+          return (b.timestamp || 0) - (a.timestamp || 0);
+        });
+      }
+
+      function getThresholdRows(tab) {
+        let rows = tab.rows.slice();
+        if (tab.kind === "quiet") {
+          const maxLikes = Number(els.quietLikeMax.value || 1);
+          rows = rows.filter((item) => (item.liked || 0) <= maxLikes);
+        }
+        return rows;
       }
 
       function renderStatCard(label, value) {
@@ -867,7 +961,9 @@
               activeTab: state.activeTab,
               analysis,
               doneUsernames: Array.from(state.doneUsernames),
+              quietLikeMax: els.quietLikeMax.value,
               oldOnly: els.oldOnly.checked,
+              hideDone: els.hideDone.checked,
             }),
           );
         } catch {
@@ -882,7 +978,9 @@
           state.analysis = saved.analysis || null;
           state.activeTab = saved.activeTab || "unfollowers";
           state.doneUsernames = new Set(Array.isArray(saved.doneUsernames) ? saved.doneUsernames : []);
+          els.quietLikeMax.value = saved.quietLikeMax || "1";
           els.oldOnly.checked = Boolean(saved.oldOnly);
+          els.hideDone.checked = Boolean(saved.hideDone);
 
           if (!state.analysis) return;
           if (!state.analysis.tabs || !state.analysis.tabs[state.activeTab]) {
