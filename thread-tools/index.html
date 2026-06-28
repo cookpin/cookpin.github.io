@@ -268,9 +268,9 @@
 
       .row {
         display: grid;
-        grid-template-columns: minmax(160px, 1fr) minmax(130px, auto) auto;
+        grid-template-columns: 22px minmax(160px, 1fr) minmax(130px, auto) auto;
         align-items: center;
-        gap: 14px;
+        gap: 12px;
         min-height: 50px;
         border-radius: 6px;
         padding: 8px 6px;
@@ -282,6 +282,21 @@
 
       .profile {
         min-width: 0;
+      }
+
+      .done-check {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .done-check:checked + .profile .username,
+      .done-check:checked + .profile .display-name {
+        color: #666;
+        text-decoration: line-through;
+        text-decoration-thickness: 1px;
       }
 
       .username {
@@ -415,10 +430,15 @@
         }
 
         .row {
-          grid-template-columns: 1fr;
+          grid-template-columns: 22px 1fr;
           gap: 4px;
           padding: 12px 2px;
           border-bottom: 1px solid #202020;
+        }
+
+        .date,
+        .chips {
+          grid-column: 2;
         }
 
         .chips {
@@ -495,9 +515,12 @@
         info: "personal_information.json",
       };
 
+      const STORAGE_KEY = "threads-tool-state-v1";
+
       const state = {
         activeTab: "unfollowers",
         analysis: null,
+        doneUsernames: new Set(),
       };
 
       const els = {
@@ -540,7 +563,25 @@
         if (file) analyzeFile(file);
       });
 
-      els.oldOnly.addEventListener("change", renderRows);
+      els.oldOnly.addEventListener("change", () => {
+        saveStoredState();
+        renderRows();
+      });
+
+      els.list.addEventListener("change", (event) => {
+        const checkbox = event.target;
+        if (!(checkbox instanceof HTMLInputElement) || !checkbox.classList.contains("done-check")) return;
+        const username = checkbox.dataset.username;
+        if (!username) return;
+        if (checkbox.checked) {
+          state.doneUsernames.add(username);
+        } else {
+          state.doneUsernames.delete(username);
+        }
+        saveStoredState();
+      });
+
+      restoreStoredState();
 
       async function analyzeFile(file) {
         clearError();
@@ -551,7 +592,9 @@
           const zip = await readZip(file);
           const json = await readThreadsJson(zip);
           state.analysis = analyzeThreads(json, zip, file);
+          state.analysis.fileName = file.name;
           state.activeTab = "unfollowers";
+          saveStoredState();
           renderAnalysis();
         } catch (error) {
           showError(error.message || "zip 파일을 분석하지 못했습니다.");
@@ -750,6 +793,7 @@
         els.tabs.querySelectorAll(".tab").forEach((button) => {
           button.addEventListener("click", () => {
             state.activeTab = button.dataset.tab;
+            saveStoredState();
             renderAnalysis();
           });
         });
@@ -789,6 +833,7 @@
 
       function renderAccountRow(account) {
         const chips = [];
+        const checked = state.doneUsernames.has(account.username) ? " checked" : "";
         if (account.followsBack && account.iFollow) chips.push(`<span class="chip accent">맞팔</span>`);
         if (!account.followsBack && account.iFollow) chips.push(`<span class="chip danger">나만 팔로우 중인 계정</span>`);
         if (!account.iFollow) chips.push(`<span class="chip warn">상대방만 팔로우 중인 계정</span>`);
@@ -797,6 +842,7 @@
 
         return `
           <div class="row">
+            <input class="done-check" type="checkbox" data-username="${escapeAttr(account.username)}" aria-label="@${escapeAttr(account.username)} 정리 완료"${checked} />
             <div class="profile">
               <a class="username" href="${escapeAttr(account.href)}" target="_blank" rel="noreferrer">@${escapeHtml(account.username)}</a>
               ${account.title ? `<div class="display-name">${escapeHtml(account.title)}</div>` : ""}
@@ -805,6 +851,50 @@
             <div class="chips">${chips.join("")}</div>
           </div>
         `;
+      }
+
+      function saveStoredState() {
+        try {
+          const analysis = state.analysis ? { ...state.analysis } : null;
+          if (analysis) {
+            delete analysis.likeMap;
+            delete analysis.followers;
+            delete analysis.following;
+          }
+          localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+              activeTab: state.activeTab,
+              analysis,
+              doneUsernames: Array.from(state.doneUsernames),
+              oldOnly: els.oldOnly.checked,
+            }),
+          );
+        } catch {
+          // Storage can be unavailable in some private browsing modes.
+        }
+      }
+
+      function restoreStoredState() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+          if (!saved || typeof saved !== "object") return;
+          state.analysis = saved.analysis || null;
+          state.activeTab = saved.activeTab || "unfollowers";
+          state.doneUsernames = new Set(Array.isArray(saved.doneUsernames) ? saved.doneUsernames : []);
+          els.oldOnly.checked = Boolean(saved.oldOnly);
+
+          if (!state.analysis) return;
+          if (!state.analysis.tabs || !state.analysis.tabs[state.activeTab]) {
+            state.activeTab = "unfollowers";
+          }
+          if (state.analysis.fileName) {
+            els.uploadText.textContent = state.analysis.fileName;
+          }
+          renderAnalysis();
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+        }
       }
 
       function clearError() {
