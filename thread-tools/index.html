@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Threads Tool</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #141414;
+        --panel: #101010;
+        --panel-2: #1f1f1f;
+        --panel-3: #2f2f2f;
+        --line: #3a3a3a;
+        --text: #cfcfcf;
+        --muted: #777;
+        --soft: #a7a7a7;
+        --accent: royalblue;
+        --accent-soft: rgba(65, 105, 225, 0.14);
+        --danger: #ff6d6d;
+        --warn: #e6b85c;
+        --radius: 8px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        letter-spacing: 0;
+        font-weight: 400;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .wrap {
+        width: min(1100px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 56px 0 72px;
+      }
+
+      .upload {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        min-height: 64px;
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--panel-2);
+        margin-bottom: 24px;
+        border: 1px solid transparent;
+      }
+
+      .upload.dragging {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px var(--accent-soft);
+      }
+
+      .upload-text {
+        display: flex;
+        align-items: center;
+        padding: 0 22px;
+        color: #bfbfbf;
+        font-size: 17px;
+        font-weight: 450;
+      }
+
+      .file-button {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 122px;
+        background: var(--panel-3);
+        color: #d6d6d6;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .file-button input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+
+      .section {
+        padding-top: 12px;
+      }
+
+      .guide {
+        margin-bottom: 48px;
+      }
+
+      h2 {
+        margin: 0 0 26px;
+        color: #d1d1d1;
+        font-size: clamp(21px, 2vw, 27px);
+        line-height: 1.25;
+        font-weight: 650;
+      }
+
+      .guide ol {
+        margin: 0;
+        padding-left: 24px;
+        color: #b8b8b8;
+        font-size: 16px;
+        line-height: 1.9;
+        font-weight: 400;
+      }
+
+      .guide strong {
+        color: var(--accent);
+        font-weight: 550;
+      }
+
+      .empty-note,
+      .analysis-note {
+        color: #bdbdbd;
+        font-size: 16px;
+        line-height: 1.75;
+      }
+
+      .analysis-note {
+        margin: 0 0 20px;
+      }
+
+      .analysis-note p {
+        margin: 0 0 6px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        margin: 0 0 28px;
+      }
+
+      .stat {
+        min-height: 76px;
+        padding: 16px 18px;
+        border: 1px solid #242424;
+        background: var(--panel);
+        border-radius: var(--radius);
+      }
+
+      .stat span {
+        display: block;
+        color: #858585;
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 10px;
+      }
+
+      .stat strong {
+        display: block;
+        color: #e0e0e0;
+        font-size: 23px;
+        font-weight: 550;
+        line-height: 1;
+      }
+
+      .tab-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 28px 0 18px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+      }
+
+      .tab {
+        min-height: 42px;
+        padding: 0 16px;
+        border: 1px solid #303030;
+        border-radius: var(--radius);
+        background: #1d1d1d;
+        color: #b9b9b9;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .tab.active {
+        border-color: rgba(65, 105, 225, 0.55);
+        background: var(--accent-soft);
+        color: #edf1ff;
+      }
+
+      .check-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+        padding: 0 14px;
+        border-radius: var(--radius);
+        background: #202020;
+        color: #bbb;
+        font-size: 14px;
+        font-weight: 400;
+        margin-left: auto;
+      }
+
+      .check-row input {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--accent);
+      }
+
+      .result-card {
+        background: var(--panel);
+        border: 1px solid #191919;
+        border-radius: var(--radius);
+        padding: 26px 26px 18px;
+        min-height: 420px;
+      }
+
+      .result-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #242424;
+        margin-bottom: 10px;
+      }
+
+      .result-title {
+        color: #ddd;
+        font-size: 17px;
+        font-weight: 600;
+      }
+
+      .result-count {
+        color: #868686;
+        font-size: 14px;
+        font-weight: 450;
+      }
+
+      .list {
+        display: grid;
+        gap: 2px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: minmax(160px, 1fr) minmax(130px, auto) auto;
+        align-items: center;
+        gap: 14px;
+        min-height: 50px;
+        border-radius: 6px;
+        padding: 8px 6px;
+      }
+
+      .row:hover {
+        background: #171717;
+      }
+
+      .profile {
+        min-width: 0;
+      }
+
+      .username {
+        color: #d4d4d4;
+        font-size: 16px;
+        font-weight: 450;
+        word-break: break-all;
+      }
+
+      .username:hover {
+        color: #fff;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 4px;
+      }
+
+      .display-name {
+        margin-top: 3px;
+        color: #686868;
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .date {
+        color: #676767;
+        font-size: 14px;
+        font-weight: 400;
+        white-space: nowrap;
+      }
+
+      .chips {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        min-height: 28px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: #222;
+        color: #aaa;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .chip.accent {
+        background: var(--accent-soft);
+        color: #b9c7ff;
+      }
+
+      .chip.danger {
+        background: rgba(255, 109, 109, 0.12);
+        color: #ff9e9e;
+      }
+
+      .chip.warn {
+        background: rgba(230, 184, 92, 0.13);
+        color: #e7c57d;
+      }
+
+      .empty {
+        padding: 48px 12px;
+        color: #8a8a8a;
+        font-size: 15px;
+        text-align: center;
+      }
+
+      .error {
+        display: none;
+        margin: -26px 0 34px;
+        padding: 14px 16px;
+        border: 1px solid rgba(255, 109, 109, 0.35);
+        background: rgba(255, 109, 109, 0.1);
+        color: #ffb0b0;
+        border-radius: var(--radius);
+        line-height: 1.6;
+      }
+
+      .error.show {
+        display: block;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 760px) {
+        .wrap {
+          width: min(100% - 24px, 680px);
+          padding-top: 30px;
+        }
+
+        .upload {
+          grid-template-columns: 1fr;
+          margin-bottom: 36px;
+        }
+
+        .file-button {
+          width: 100%;
+          min-height: 52px;
+        }
+
+        .guide ol,
+        .empty-note,
+        .analysis-note {
+          font-size: 14px;
+        }
+
+        .stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .stat.combined {
+          grid-column: 1 / -1;
+        }
+
+        .tab-row {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .check-row {
+          margin-left: 0;
+        }
+
+        .row {
+          grid-template-columns: 1fr;
+          gap: 4px;
+          padding: 12px 2px;
+          border-bottom: 1px solid #202020;
+        }
+
+        .chips {
+          justify-content: flex-start;
+        }
+
+        .date {
+          font-size: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <label class="upload" id="dropZone">
+        <div class="upload-text" id="uploadText">.zip 파일을 추가해주세요. (made by @cook__pin)</div>
+        <div class="file-button">
+          파일 선택
+          <input id="fileInput" type="file" accept=".zip,application/zip" />
+        </div>
+      </label>
+
+      <div class="error" id="errorBox"></div>
+
+      <section class="guide" id="guide">
+        <h2># 스레드 zip 파일 다운로드 방법</h2>
+        <ol>
+          <li>스레드 모바일 버전 접속 후, 우측 상단 <strong>(=)</strong> 클릭</li>
+          <li><strong>계정 센터</strong> 클릭</li>
+          <li><strong>내 정보 및 권한</strong> 메뉴 클릭</li>
+          <li><strong>내 정보 내보내기</strong> 클릭</li>
+          <li><strong>내보내기 만들기</strong> 클릭</li>
+          <li><strong>계정 선택</strong></li>
+          <li><strong>정보 맞춤설정</strong>에서 <strong>스레드</strong>만 선택</li>
+          <li>기간은 <strong>전체 기간</strong>, 형식은 <strong>JSON</strong>으로 설정</li>
+          <li><strong>내보내기 시작</strong> 클릭</li>
+        </ol>
+      </section>
+
+      <section class="section hidden" id="analysis">
+        <div class="stats" id="stats"></div>
+
+        <div class="tab-row">
+          <div class="tabs" id="tabs"></div>
+          <label class="check-row">
+            <input id="oldOnly" type="checkbox" />
+            30일 넘게 팔로우한 계정만
+          </label>
+        </div>
+
+        <div class="result-card">
+          <div class="result-head">
+            <div class="result-title" id="resultTitle">결과</div>
+            <div class="result-count" id="resultCount">0명</div>
+          </div>
+          <div class="list" id="list"></div>
+        </div>
+      </section>
+
+      <section class="section hidden" id="emptyResult">
+        <h2># 나만 팔로우 중인 계정 : 총 0명</h2>
+        <div class="empty-note">
+          <p>아직 분석된 zip 파일이 없습니다.</p>
+          <p class="muted">업로드한 파일은 브라우저 안에서만 읽고, 서버로 전송하지 않습니다.</p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const REQUIRED_FILES = {
+        followers: "followers.json",
+        following: "following.json",
+        likes: "liked_threads.json",
+        info: "personal_information.json",
+      };
+
+      const state = {
+        activeTab: "unfollowers",
+        analysis: null,
+      };
+
+      const els = {
+        dropZone: document.getElementById("dropZone"),
+        fileInput: document.getElementById("fileInput"),
+        uploadText: document.getElementById("uploadText"),
+        errorBox: document.getElementById("errorBox"),
+        guide: document.getElementById("guide"),
+        analysis: document.getElementById("analysis"),
+        emptyResult: document.getElementById("emptyResult"),
+        stats: document.getElementById("stats"),
+        tabs: document.getElementById("tabs"),
+        oldOnly: document.getElementById("oldOnly"),
+        resultTitle: document.getElementById("resultTitle"),
+        resultCount: document.getElementById("resultCount"),
+        list: document.getElementById("list"),
+      };
+
+      els.fileInput.addEventListener("change", (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (file) analyzeFile(file);
+      });
+
+      for (const name of ["dragenter", "dragover"]) {
+        els.dropZone.addEventListener(name, (event) => {
+          event.preventDefault();
+          els.dropZone.classList.add("dragging");
+        });
+      }
+
+      for (const name of ["dragleave", "drop"]) {
+        els.dropZone.addEventListener(name, (event) => {
+          event.preventDefault();
+          els.dropZone.classList.remove("dragging");
+        });
+      }
+
+      els.dropZone.addEventListener("drop", (event) => {
+        const file = event.dataTransfer.files && event.dataTransfer.files[0];
+        if (file) analyzeFile(file);
+      });
+
+      els.oldOnly.addEventListener("change", renderRows);
+
+      async function analyzeFile(file) {
+        clearError();
+        els.uploadText.textContent = file.name;
+        els.uploadText.style.fontStyle = "normal";
+
+        try {
+          const zip = await readZip(file);
+          const json = await readThreadsJson(zip);
+          state.analysis = analyzeThreads(json, zip, file);
+          state.activeTab = "unfollowers";
+          renderAnalysis();
+        } catch (error) {
+          showError(error.message || "zip 파일을 분석하지 못했습니다.");
+        }
+      }
+
+      async function readThreadsJson(zip) {
+        const result = {};
+        for (const [key, baseName] of Object.entries(REQUIRED_FILES)) {
+          const entry = zip.entries.find((item) => item.name.endsWith(`/threads/${baseName}`) || item.name.endsWith(baseName));
+          if (!entry && (key === "followers" || key === "following")) {
+            throw new Error(`${baseName} 파일을 찾을 수 없습니다. Threads 데이터를 JSON 형식으로 다시 다운로드해주세요.`);
+          }
+          if (!entry) {
+            result[key] = null;
+            continue;
+          }
+          const bytes = await extractEntry(zip.buffer, entry);
+          const text = new TextDecoder("utf-8").decode(bytes);
+          result[key] = JSON.parse(text);
+        }
+        return result;
+      }
+
+      function analyzeThreads(json, zip, file) {
+        const followers = dedupeAccounts(readRelationRows(json.followers));
+        const following = dedupeAccounts(readRelationRows(json.following));
+        const followersSet = new Set(followers.map((item) => item.username));
+        const followingSet = new Set(following.map((item) => item.username));
+        const likeMap = readLikeMap(json.likes);
+        const downloadedAt = latestZipDate(zip.entries) || new Date(file.lastModified || Date.now());
+        const selfUsername = readSelfUsername(json.info);
+
+        const enrichedFollowing = following.map((account) =>
+          enrichAccount(account, {
+            followersSet,
+            followingSet,
+            likeMap,
+            downloadedAt,
+            selfUsername,
+          }),
+        );
+
+        const enrichedFollowers = followers.map((account) =>
+          enrichAccount(account, {
+            followersSet,
+            followingSet,
+            likeMap,
+            downloadedAt,
+            selfUsername,
+          }),
+        );
+
+        const tabs = {
+          unfollowers: {
+            label: "나만 팔로우 중",
+            title: "나만 팔로우 중인 계정",
+            rows: enrichedFollowing.filter((item) => !item.followsBack),
+          },
+          fans: {
+            label: "상대방만 팔로우 중",
+            title: "상대방만 팔로우 중인 계정",
+            rows: enrichedFollowers.filter((item) => !item.iFollow),
+          },
+          quiet: {
+            label: "소통 없는 계정",
+            title: "내가 팔로우 중인데 좋아요 기록이 없는 계정",
+            rows: enrichedFollowing.filter((item) => item.visibleInteractions === 0),
+          },
+        };
+
+        return {
+          downloadedAt,
+          selfUsername,
+          followers: enrichedFollowers,
+          following: enrichedFollowing,
+          likeMap,
+          tabs,
+          totals: {
+            followers: followers.length,
+            following: following.length,
+            mutual: enrichedFollowing.filter((item) => item.followsBack).length,
+            unfollowers: tabs.unfollowers.rows.length,
+            quiet: tabs.quiet.rows.length,
+            fans: tabs.fans.rows.length,
+          },
+        };
+      }
+
+      function enrichAccount(account, context) {
+        const liked = context.likeMap.get(account.username) || { count: 0, latest: 0 };
+        const visibleInteractions = liked.count;
+        const lastInteraction = liked.latest || 0;
+        const daysFollowed = account.timestamp
+          ? Math.floor((context.downloadedAt.getTime() - account.timestamp * 1000) / 86400000)
+          : null;
+        return {
+          ...account,
+          href: account.href || profileLink(account.username),
+          followsBack: context.followersSet.has(account.username),
+          iFollow: context.followingSet.has(account.username),
+          liked: liked.count,
+          visibleInteractions,
+          lastInteraction,
+          daysFollowed,
+        };
+      }
+
+      function readRelationRows(data) {
+        const arr = firstArray(data);
+        return arr
+          .map((item) => {
+            const detail = (item.string_list_data || [])[0] || {};
+            const username = normalizeUsername(detail.value);
+            return {
+              username,
+              title: repairText(item.title || ""),
+              href: detail.href || profileLink(username),
+              timestamp: detail.timestamp || 0,
+            };
+          })
+          .filter((item) => item.username);
+      }
+
+      function readLikeMap(data) {
+        const map = new Map();
+        if (!data) return map;
+        for (const item of firstArray(data)) {
+          const detail = (item.string_list_data || [])[0] || {};
+          const href = detail.href || "";
+          const matched = href.match(/threads\.com\/@([^/]+)/i);
+          const username = normalizeUsername(matched ? matched[1] : item.title);
+          if (!username) continue;
+          const prev = map.get(username) || { count: 0, latest: 0 };
+          map.set(username, {
+            count: prev.count + 1,
+            latest: Math.max(prev.latest, detail.timestamp || 0),
+          });
+        }
+        return map;
+      }
+
+      function readSelfUsername(data) {
+        if (!data) return "";
+        const profile = firstArray(data)[0] || {};
+        const map = profile.string_map_data || {};
+        for (const [key, value] of Object.entries(map)) {
+          if (repairText(key) === "사용자 이름") {
+            return normalizeUsername(value && value.value);
+          }
+        }
+        return "";
+      }
+
+      function dedupeAccounts(rows) {
+        const map = new Map();
+        for (const row of rows) {
+          if (!map.has(row.username)) {
+            map.set(row.username, row);
+            continue;
+          }
+          const prev = map.get(row.username);
+          if ((row.timestamp || 0) > (prev.timestamp || 0)) {
+            map.set(row.username, { ...prev, ...row });
+          }
+        }
+        return Array.from(map.values());
+      }
+
+      function firstArray(data) {
+        if (!data || typeof data !== "object") return [];
+        return Object.values(data).find(Array.isArray) || [];
+      }
+
+      function renderAnalysis() {
+        const analysis = state.analysis;
+        els.guide.classList.add("hidden");
+        els.emptyResult.classList.add("hidden");
+        els.analysis.classList.remove("hidden");
+
+        const stats = [
+          { label: "팔로워", value: analysis.totals.followers },
+          { label: "팔로잉", value: analysis.totals.following },
+          { label: "맞팔", value: analysis.totals.mutual },
+          { label: "소통 없는 계정", value: analysis.totals.quiet },
+          { label: "나만 팔로우 중인 계정", value: analysis.totals.unfollowers },
+          { label: "상대방만 팔로우 중인 계정", value: analysis.totals.fans },
+        ];
+
+        els.stats.innerHTML = stats.map((item) => renderStatCard(item.label, item.value)).join("");
+
+        els.tabs.innerHTML = Object.entries(analysis.tabs)
+          .map(([key, tab]) => `<button class="tab ${key === state.activeTab ? "active" : ""}" type="button" data-tab="${key}">${escapeHtml(tab.label)} ${tab.rows.length.toLocaleString("ko-KR")}</button>`)
+          .join("");
+
+        els.tabs.querySelectorAll(".tab").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.activeTab = button.dataset.tab;
+            renderAnalysis();
+          });
+        });
+
+        renderRows();
+      }
+
+      function renderRows() {
+        const analysis = state.analysis;
+        if (!analysis) return;
+
+        const tab = analysis.tabs[state.activeTab];
+        const oldOnly = els.oldOnly.checked;
+
+        let rows = tab.rows.slice();
+
+        if (oldOnly) rows = rows.filter((item) => item.daysFollowed === null || item.daysFollowed >= 30);
+
+        els.resultTitle.textContent = tab.title;
+        els.resultCount.textContent = `${rows.length.toLocaleString("ko-KR")}명`;
+
+        if (!rows.length) {
+          els.list.innerHTML = `<div class="empty">표시할 계정이 없습니다.</div>`;
+          return;
+        }
+
+        els.list.innerHTML = rows.map(renderAccountRow).join("");
+      }
+
+      function renderStatCard(label, value) {
+        return `<div class="stat">${renderStatItem(label, value)}</div>`;
+      }
+
+      function renderStatItem(label, value) {
+        return `<div class="stat-item"><span>${escapeHtml(label)}</span><strong>${value.toLocaleString("ko-KR")}</strong></div>`;
+      }
+
+      function renderAccountRow(account) {
+        const chips = [];
+        if (account.followsBack && account.iFollow) chips.push(`<span class="chip accent">맞팔</span>`);
+        if (!account.followsBack && account.iFollow) chips.push(`<span class="chip danger">나만 팔로우 중인 계정</span>`);
+        if (!account.iFollow) chips.push(`<span class="chip warn">상대방만 팔로우 중인 계정</span>`);
+        if (account.liked) chips.push(`<span class="chip">좋아요 ${account.liked}</span>`);
+        if (!account.visibleInteractions && account.iFollow) chips.push(`<span class="chip">소통 기록 없음</span>`);
+
+        return `
+          <div class="row">
+            <div class="profile">
+              <a class="username" href="${escapeAttr(account.href)}" target="_blank" rel="noreferrer">@${escapeHtml(account.username)}</a>
+              ${account.title ? `<div class="display-name">${escapeHtml(account.title)}</div>` : ""}
+            </div>
+            <div class="date">${escapeHtml(account.timestamp ? formatCompactDate(account.timestamp) : formatInteractionDate(account.lastInteraction))}</div>
+            <div class="chips">${chips.join("")}</div>
+          </div>
+        `;
+      }
+
+      function clearError() {
+        els.errorBox.classList.remove("show");
+        els.errorBox.textContent = "";
+      }
+
+      function showError(message) {
+        els.errorBox.textContent = message;
+        els.errorBox.classList.add("show");
+      }
+
+      async function readZip(file) {
+        const buffer = await file.arrayBuffer();
+        const view = new DataView(buffer);
+        const eocd = findEndOfCentralDirectory(view);
+        if (eocd < 0) throw new Error("올바른 zip 파일이 아닙니다.");
+
+        const count = view.getUint16(eocd + 10, true);
+        const centralOffset = view.getUint32(eocd + 16, true);
+        const entries = [];
+        let offset = centralOffset;
+
+        for (let index = 0; index < count; index += 1) {
+          if (view.getUint32(offset, true) !== 0x02014b50) {
+            throw new Error("zip 중앙 디렉터리를 읽지 못했습니다.");
+          }
+          const method = view.getUint16(offset + 10, true);
+          const modTime = view.getUint16(offset + 12, true);
+          const modDate = view.getUint16(offset + 14, true);
+          const compressedSize = view.getUint32(offset + 20, true);
+          const uncompressedSize = view.getUint32(offset + 24, true);
+          const nameLength = view.getUint16(offset + 28, true);
+          const extraLength = view.getUint16(offset + 30, true);
+          const commentLength = view.getUint16(offset + 32, true);
+          const localOffset = view.getUint32(offset + 42, true);
+          const nameBytes = new Uint8Array(buffer, offset + 46, nameLength);
+          const name = new TextDecoder("utf-8").decode(nameBytes);
+
+          entries.push({
+            name,
+            method,
+            compressedSize,
+            uncompressedSize,
+            localOffset,
+            modifiedAt: dosDateToDate(modDate, modTime),
+          });
+          offset += 46 + nameLength + extraLength + commentLength;
+        }
+
+        return { buffer, entries };
+      }
+
+      function findEndOfCentralDirectory(view) {
+        const minOffset = Math.max(0, view.byteLength - 65558);
+        for (let offset = view.byteLength - 22; offset >= minOffset; offset -= 1) {
+          if (view.getUint32(offset, true) === 0x06054b50) return offset;
+        }
+        return -1;
+      }
+
+      async function extractEntry(buffer, entry) {
+        const view = new DataView(buffer);
+        if (view.getUint32(entry.localOffset, true) !== 0x04034b50) {
+          throw new Error(`${entry.name} 파일 위치를 읽지 못했습니다.`);
+        }
+        const nameLength = view.getUint16(entry.localOffset + 26, true);
+        const extraLength = view.getUint16(entry.localOffset + 28, true);
+        const start = entry.localOffset + 30 + nameLength + extraLength;
+        const compressed = new Uint8Array(buffer, start, entry.compressedSize);
+
+        if (entry.method === 0) return compressed;
+        if (entry.method === 8) return inflateRaw(compressed, entry.name);
+        throw new Error(`${entry.name} 압축 방식을 지원하지 않습니다. 저장 또는 deflate zip만 지원합니다.`);
+      }
+
+      async function inflateRaw(bytes, name) {
+        if (typeof DecompressionStream === "undefined") {
+          throw new Error(`${name} 압축 해제를 이 브라우저가 지원하지 않습니다. Chrome 최신 버전에서 다시 열어주세요.`);
+        }
+        for (const format of ["deflate-raw", "deflate"]) {
+          try {
+            const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(format));
+            return new Uint8Array(await new Response(stream).arrayBuffer());
+          } catch {
+            continue;
+          }
+        }
+        throw new Error(`${name} 압축 해제에 실패했습니다.`);
+      }
+
+      function dosDateToDate(date, time) {
+        const year = ((date >> 9) & 0x7f) + 1980;
+        const month = ((date >> 5) & 0x0f) - 1;
+        const day = date & 0x1f;
+        const hour = (time >> 11) & 0x1f;
+        const minute = (time >> 5) & 0x3f;
+        const second = (time & 0x1f) * 2;
+        return new Date(year, month, day, hour, minute, second);
+      }
+
+      function latestZipDate(entries) {
+        const dates = entries.map((entry) => entry.modifiedAt).filter((date) => date instanceof Date && !Number.isNaN(date.getTime()));
+        if (!dates.length) return null;
+        return new Date(Math.max(...dates.map((date) => date.getTime())));
+      }
+
+      function normalizeUsername(value) {
+        return (value || "")
+          .toString()
+          .trim()
+          .replace(/^@/, "")
+          .toLowerCase();
+      }
+
+      function normalizeSearch(value) {
+        return repairText(value || "").toLowerCase().trim();
+      }
+
+      function repairText(value) {
+        const text = (value || "").toString();
+        if (!/[ÃÂÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]/.test(text)) {
+          return text;
+        }
+        try {
+          const bytes = new Uint8Array(Array.from(text, (char) => char.charCodeAt(0) & 255));
+          const decoded = new TextDecoder("utf-8").decode(bytes);
+          return decoded.includes("�") ? text : decoded;
+        } catch {
+          return text;
+        }
+      }
+
+      function profileLink(username) {
+        return username ? `https://www.threads.com/@${encodeURIComponent(username)}` : "#";
+      }
+
+      function formatCompactDate(timestamp) {
+        const date = new Date(timestamp * 1000);
+        const ampm = date.getHours() < 12 ? "AM" : "PM";
+        return `${String(date.getFullYear()).slice(2)}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${ampm} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      }
+
+      function formatInteractionDate(timestamp) {
+        return timestamp ? `최근 ${formatCompactDate(timestamp)}` : "기록 없음";
+      }
+
+      function pad(value) {
+        return String(value).padStart(2, "0");
+      }
+
+      function escapeHtml(value) {
+        return (value || "").toString().replace(/[&<>"']/g, (char) => {
+          const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
+          return map[char];
+        });
+      }
+
+      function escapeAttr(value) {
+        return escapeHtml(value).replace(/`/g, "&#096;");
+      }
+    </script>
+  </body>
+</html>
